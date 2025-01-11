@@ -42,10 +42,8 @@ dsm_login() {
 
   session_id=$(echo "$LOGIN_RESPONSE" | jq -r '.data.sid')
   # syno_token=$(echo "$LOGIN_RESPONSE" | jq -r '.data.synotoken')
-  msg="Logged in successfully."
-  # msg="Logged in successfully.\n  syno_token: $syno_token\n  Session ID: $session_id"
-  logger -t $SCRIPT_NAME -p daemon.info $msg
-  echo $msg
+  # echo "Logged in successfully.\n  syno_token: $syno_token\n  Session ID: $session_id"
+  echo "Logged in successfully."
 }
 
 # Function: Logout from DSM
@@ -65,9 +63,7 @@ dsm_logout() {
     exit 1
   fi
 
-  msg="Logged out successfully."
-  logger -t $SCRIPT_NAME -p daemon.info $msg
-  echo $msg
+  echo "Logged out successfully."
 }
 
 # Function: Import TLS Certificate
@@ -83,14 +79,14 @@ dsm_cert_import() {
 
   UPLOAD_SUCCESS=$(echo "$UPLOAD_RESPONSE" | jq -r '.success')
   if [ "$UPLOAD_SUCCESS" != "true" ]; then
-    msg="Upload certificate failed.\nResponse: $UPLOAD_RESPONSE"
+    msg="Upload certificate failed on $SYNO_HOST.\nResponse: $UPLOAD_RESPONSE"
     logger -t $SCRIPT_NAME -p daemon.err $msg
     echo "Error: $msg"
     dsm_logout
     exit 1
   fi
 
-  msg="Certificate uploaded successfully."
+  msg="Certificate uploaded successfully on $SYNO_HOST."
   logger -t $SCRIPT_NAME -p daemon.info $msg
   echo $msg
 }
