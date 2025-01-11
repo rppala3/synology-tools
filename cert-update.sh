@@ -3,6 +3,7 @@
 . ./env
 
 SCRIPT_NAME=$(basename "$0")
+LOG_TAG="synotools/$SCRIPT_NAME"
 
 AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
 IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
@@ -35,7 +36,7 @@ dsm_login() {
   LOGIN_SUCCESS=$(echo "$LOGIN_RESPONSE" | jq -r '.success')
   if [ "$LOGIN_SUCCESS" != "true" ]; then
     msg="Authentication on $SYNO_HOST failed."
-    logger -t $SCRIPT_NAME -p daemon.err $msg
+    logger -t $LOG_TAG -p daemon.err $msg
     echo "Error: $msg"
     exit 1
   fi
@@ -58,7 +59,7 @@ dsm_logout() {
 
   if [ "$LOGOUT_SUCCESS" != "true" ]; then
     msg="Logout failed. Session might still be active."
-    logger -t $SCRIPT_NAME -p daemon.warning $msg
+    logger -t $LOG_TAG -p daemon.warning $msg
     echo "Warning: $msg"
     exit 1
   fi
@@ -80,14 +81,14 @@ dsm_cert_import() {
   UPLOAD_SUCCESS=$(echo "$UPLOAD_RESPONSE" | jq -r '.success')
   if [ "$UPLOAD_SUCCESS" != "true" ]; then
     msg="Upload certificate failed on $SYNO_HOST.\nResponse: $UPLOAD_RESPONSE"
-    logger -t $SCRIPT_NAME -p daemon.err $msg
+    logger -t $LOG_TAG -p daemon.err $msg
     echo "Error: $msg"
     dsm_logout
     exit 1
   fi
 
   msg="Certificate uploaded successfully on $SYNO_HOST."
-  logger -t $SCRIPT_NAME -p daemon.info $msg
+  logger -t $LOG_TAG -p daemon.info $msg
   echo $msg
 }
 
