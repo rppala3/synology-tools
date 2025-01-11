@@ -1,0 +1,7 @@
+SYNO_HOST="__CHANGE_ME__"
+SYNO_PORT=5001             # Synology default HTTPS port
+SYNO_USER="__CHANGE_ME__"
+SYNO_PASS="__CHANGE_ME__"
+
+ACME_PATH="/conf/acme"
+ACME_CERT_ID="" # if empty, the certificate will be loaded as new
