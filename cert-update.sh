@@ -1,16 +1,22 @@
 #!/bin/sh
 
-USER=$(whoami) #DEBUG
+USER=$(whoami) # DEBUG
 SCRIPT_NAME=$(basename "$0")
 LOG_TAG="synotools/$SCRIPT_NAME"
 
-#DEBUG
+# DEBUG
 msg="Run by $USER"
 logger -t "$LOG_TAG" -p daemon.info "$msg"
-echo $msg
-#/DEBUG
+echo "$msg"
+# /DEBUG
+
+logger -t "$LOG_TAG" -p daemon.info "Test info message" # DEBUG
+logger -t "$LOG_TAG" -p daemon.warning "Test warning message" # DEBUG
+logger -t "$LOG_TAG" -p daemon.err "Test erroro message" # DEBUG
 
 . ./env
+
+logger -t "$LOG_TAG" -p daemon.info "Test '. ./env'" # DEBUG
 
 AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
 IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
