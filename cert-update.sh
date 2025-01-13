@@ -1,9 +1,16 @@
 #!/bin/sh
 
-. ./env
-
+USER=$(whoami) #DEBUG
 SCRIPT_NAME=$(basename "$0")
 LOG_TAG="synotools/$SCRIPT_NAME"
+
+#DEBUG
+msg="Run by $USER"
+logger -t $LOG_TAG -p daemon.info $msg
+echo $msg
+#/DEBUG
+
+. ./env
 
 AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
 IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
