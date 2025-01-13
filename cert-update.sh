@@ -6,7 +6,7 @@ LOG_TAG="synotools/$SCRIPT_NAME"
 
 #DEBUG
 msg="Run by $USER"
-logger -t $LOG_TAG -p daemon.info $msg
+logger -t "$LOG_TAG" -p daemon.info "$msg"
 echo $msg
 #/DEBUG
 
@@ -15,15 +15,19 @@ echo $msg
 AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
 IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
 
-# Certificate files
-CERT_FILE="$ACME_PATH/gargantua.wilsley.xyz.crt"
-KEY_FILE="$ACME_PATH/gargantua.wilsley.xyz.key"
-CA_FILE="$ACME_PATH/gargantua.wilsley.xyz.ca"
-CERT_DESC="gargantua.wilsley.xyz"
+check_file() {
+  local file="$1"
+  local err_msg="$2"
+  if [ ! -f "$file" ]; then
+    logger -t "$LOG_TAG" -p daemon.err "$err_msg"
+    echo "$err_msg"
+    exit 1
+  fi
+}
 
-[ -f "$CERT_FILE" ] || echo "Missing certificate file: $CERT_FILE"
-[ -f "$KEY_FILE" ] || echo "Missing key file: $KEY_FILE"
-[ -f "$CA_FILE" ] || echo "Missing CA file: $CA_FILE"
+check_file "$ACME_CERT_FILE" "Missing certificate file: $ACME_CERT_FILE"
+check_file "$ACME_KEY_FILE" "Missing key file: $ACME_KEY_FILE"
+check_file "$ACME_CA_FILE" "Missing CA file: $ACME_CA_FILE"
 
 session_id=""
 syno_token="" # Not used
@@ -31,7 +35,7 @@ SYNO_APP="Core"
 
 # Function: Login to DSM
 dsm_login() {
-  LOGIN_RESPONSE=$(curl -k -s -X POST $AUTH_ENDPOINT \
+  LOGIN_RESPONSE=$(curl -k -s -X POST "$AUTH_ENDPOINT" \
     -d "api=SYNO.API.Auth" \
     -d "method=login" \
     -d "version=7" \
@@ -43,7 +47,7 @@ dsm_login() {
   LOGIN_SUCCESS=$(echo "$LOGIN_RESPONSE" | jq -r '.success')
   if [ "$LOGIN_SUCCESS" != "true" ]; then
     msg="Authentication on $SYNO_HOST failed."
-    logger -t $LOG_TAG -p daemon.err $msg
+    logger -t "$LOG_TAG" -p daemon.err "$msg"
     echo "Error: $msg"
     exit 1
   fi
@@ -56,7 +60,7 @@ dsm_login() {
 
 # Function: Logout from DSM
 dsm_logout() {
-  LOGOUT_RESPONSE=$(curl -k -s -X POST $AUTH_ENDPOINT \
+  LOGOUT_RESPONSE=$(curl -k -s -X POST "$AUTH_ENDPOINT" \
     -d "api=SYNO.API.Auth" \
     -d "method=logout" \
     -d "version=7" \
@@ -66,7 +70,7 @@ dsm_logout() {
 
   if [ "$LOGOUT_SUCCESS" != "true" ]; then
     msg="Logout failed. Session might still be active."
-    logger -t $LOG_TAG -p daemon.warning $msg
+    logger -t "$LOG_TAG" -p daemon.warning "$msg"
     echo "Warning: $msg"
     exit 1
   fi
@@ -79,24 +83,24 @@ dsm_cert_import() {
   UPLOAD_RESPONSE=$(curl -k -s -X POST "$IMPORT_ENDPOINT?api=SYNO.Core.Certificate&version=1&method=import&session=$SYNO_APP&_sid=$session_id" \
     -F "as_default=false" \
     -F "id=$ACME_CERT_ID" \
-    -F "desc=$CERT_DESC" \
-    -F "key=@$KEY_FILE;type=application/x-x509-ca-cert" \
-    -F "cert=@$CERT_FILE;type=application/x-x509-ca-cert" \
-    -F "inter_cert=@$CA_FILE;type=application/x-x509-ca-cert")
+    -F "desc=$ACME_CERT_DESC" \
+    -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+    -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+    -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
   #   -H "X-SYNO-TOKEN: $syno_token" \
 
   UPLOAD_SUCCESS=$(echo "$UPLOAD_RESPONSE" | jq -r '.success')
   if [ "$UPLOAD_SUCCESS" != "true" ]; then
     msg="Upload certificate failed on $SYNO_HOST.\nResponse: $UPLOAD_RESPONSE"
-    logger -t $LOG_TAG -p daemon.err $msg
+    logger -t "$LOG_TAG" -p daemon.err "$msg"
     echo "Error: $msg"
     dsm_logout
     exit 1
   fi
 
   msg="Certificate uploaded successfully on $SYNO_HOST."
-  logger -t $LOG_TAG -p daemon.info $msg
-  echo $msg
+  logger -t "$LOG_TAG" -p daemon.info "$msg"
+  echo "$msg"
 }
 
 # Main Script Execution
