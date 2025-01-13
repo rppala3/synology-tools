@@ -4,4 +4,9 @@ SYNO_USER="__CHANGE_ME__"
 SYNO_PASS="__CHANGE_ME__"
 
 ACME_PATH="/conf/acme"
+ACME_CERT_FILE="$ACME_PATH/gargantua.wilsley.xyz.crt"
+ACME_KEY_FILE="$ACME_PATH/gargantua.wilsley.xyz.key"
+ACME_CA_FILE="$ACME_PATH/gargantua.wilsley.xyz.ca"
+ACME_CERT_DESC="gargantua.wilsley.xyz"
+
 ACME_CERT_ID="" # if empty, the certificate will be loaded as new
