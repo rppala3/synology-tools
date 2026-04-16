@@ -41,7 +41,9 @@ check_file() {
 }
 
 json_value() {
-  printf '%s' "$1" | jq -r "$2"
+  input="$1"
+  shift
+  printf '%s' "$input" | jq -r "$@"
 }
 
 curl_post() {
@@ -54,6 +56,9 @@ curl_post() {
 
 session_id=""
 syno_token=""
+cert_id=""
+cert_list_response=""
+cert_list_error=""
 SYNO_APP="${SYNO_APP:-Core}"
 
 cleanup() {
@@ -82,7 +87,6 @@ check_file "$ACME_CA_FILE"
 
 AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
 IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
-ACME_CERT_ID="${ACME_CERT_ID:-}"
 ACME_AS_DEFAULT="${ACME_AS_DEFAULT:-false}"
 
 dsm_login() {
@@ -137,8 +141,11 @@ dsm_cert_import() {
 
   set -- "$@" -F "as_default=$ACME_AS_DEFAULT"
 
-  if [ -n "$ACME_CERT_ID" ]; then
-    set -- "$@" -F "id=$ACME_CERT_ID"
+  if [ -n "$cert_id" ]; then
+    log_info "Found existing DSM certificate '$ACME_CERT_DESC' with id $cert_id. Replacing it."
+    set -- "$@" -F "id=$cert_id"
+  else
+    log_info "No existing DSM certificate '$ACME_CERT_DESC' found. Importing it as a new certificate."
   fi
 
   UPLOAD_RESPONSE=$(curl_post "$@" \
@@ -155,10 +162,58 @@ dsm_cert_import() {
   log_info "Certificate uploaded successfully on $SYNO_HOST."
 }
 
+dsm_fetch_cert_list() {
+  cert_api="$1"
+  list_url="$IMPORT_ENDPOINT?api=$cert_api&version=1&method=list&session=$SYNO_APP&_sid=$session_id"
+
+  set -- "$list_url"
+
+  if [ -n "$syno_token" ]; then
+    set -- "$@" -H "X-SYNO-TOKEN: $syno_token"
+  fi
+
+  cert_list_response=$(curl_post "$@") || {
+    cert_list_error="Certificate list request using $cert_api failed."
+    return 1
+  }
+
+  cert_list_success=$(json_value "$cert_list_response" '.success // false') || {
+    cert_list_error="Certificate list response from $cert_api was not valid JSON: $cert_list_response"
+    return 1
+  }
+
+  if [ "$cert_list_success" != "true" ]; then
+    cert_list_error="Certificate list using $cert_api failed. Response: $cert_list_response"
+    return 1
+  fi
+}
+
+dsm_find_cert_id_by_desc() {
+  if ! dsm_fetch_cert_list "SYNO.Core.Certificate"; then
+    log_warning "$cert_list_error"
+    dsm_fetch_cert_list "SYNO.Core.Certificate.CRT" || die "$cert_list_error"
+  fi
+
+  cert_match_count=$(json_value "$cert_list_response" --arg desc "$ACME_CERT_DESC" '[.data.certificates[]? | select(.desc == $desc)] | length')
+  case "$cert_match_count" in
+    0)
+      cert_id=""
+      return 0
+      ;;
+    1)
+      cert_id=$(json_value "$cert_list_response" --arg desc "$ACME_CERT_DESC" '.data.certificates[]? | select(.desc == $desc) | .id')
+      ;;
+    *)
+      die "Found $cert_match_count DSM certificates with description '$ACME_CERT_DESC'. Make certificate descriptions unique before importing."
+      ;;
+  esac
+}
+
 trap cleanup EXIT HUP INT TERM
 
 log_info "Starting certificate import for $ACME_CERT_DESC."
 dsm_login
+dsm_find_cert_id_by_desc
 dsm_cert_import
 dsm_logout
 trap - EXIT HUP INT TERM

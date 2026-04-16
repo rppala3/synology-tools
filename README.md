@@ -34,8 +34,10 @@ ACME_CA_FILE="$ACME_PATH/example.com.ca"
 ACME_CERT_DESC="example.com"
 ```
 
-If you are replacing an existing DSM certificate, set `ACME_CERT_ID` to that certificate id.
-If `ACME_CERT_ID` is empty, DSM imports the certificate as a new certificate.
+The script looks up an existing DSM certificate by `ACME_CERT_DESC`.
+If no certificate with that description exists, DSM imports it as a new certificate.
+If exactly one matching certificate exists, DSM replaces that certificate.
+Keep certificate descriptions unique in DSM so renewals update the right certificate.
 
 ## pfSense Deploy Action
 
@@ -77,7 +79,7 @@ Common checks:
 
 - Confirm the files in `ACME_CERT_FILE`, `ACME_KEY_FILE`, and `ACME_CA_FILE` exist on pfSense.
 - Confirm the DSM account can manage certificates.
-- Confirm `ACME_CERT_ID` is correct if you are replacing an existing certificate.
+- Confirm `ACME_CERT_DESC` matches a unique DSM certificate description if you are replacing an existing certificate.
 - Set `SYNO_VERIFY_TLS=false` if pfSense does not trust the current DSM certificate.
 
 ## Reference
