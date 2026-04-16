@@ -42,13 +42,13 @@ If `ACME_CERT_ID` is empty, DSM imports the certificate as a new certificate.
 Install the repository on pfSense somewhere persistent, for example:
 
 ```sh
-/root/synology-tools
+git clone git@github.com:rppala3/synology-tools.git /opt/synotools
 ```
 
 In the pfSense ACME certificate configuration, add a deploy/renewal action that runs:
 
 ```sh
-/root/synology-tools/cert-update.sh
+/opt/synotools/cert-update.sh
 ```
 
 The script loads `env` from the same directory as the script, so it does not depend on the current working directory used by the ACME hook.
@@ -67,7 +67,7 @@ The pfSense host running the script needs:
 Run the script manually on pfSense first:
 
 ```sh
-/root/synology-tools/cert-update.sh
+/opt/synotools/cert-update.sh
 ```
 
 The script logs to syslog with a tag like `synotools/cert-update.sh`.
