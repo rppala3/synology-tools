@@ -164,15 +164,18 @@ dsm_cert_import() {
 
 dsm_fetch_cert_list() {
   cert_api="$1"
-  list_url="$IMPORT_ENDPOINT?api=$cert_api&version=1&method=list&session=$SYNO_APP&_sid=$session_id"
 
-  set -- "$list_url"
+  set -- "$IMPORT_ENDPOINT"
 
   if [ -n "$syno_token" ]; then
     set -- "$@" -H "X-SYNO-TOKEN: $syno_token"
   fi
 
-  cert_list_response=$(curl_post "$@") || {
+  cert_list_response=$(curl_post "$@" \
+    -d "api=$cert_api" \
+    -d "method=list" \
+    -d "version=1" \
+    -d "_sid=$session_id") || {
     cert_list_error="Certificate list request using $cert_api failed."
     return 1
   }
@@ -189,9 +192,9 @@ dsm_fetch_cert_list() {
 }
 
 dsm_find_cert_id_by_desc() {
-  if ! dsm_fetch_cert_list "SYNO.Core.Certificate"; then
+  if ! dsm_fetch_cert_list "SYNO.Core.Certificate.CRT"; then
     log_warning "$cert_list_error"
-    dsm_fetch_cert_list "SYNO.Core.Certificate.CRT" || die "$cert_list_error"
+    dsm_fetch_cert_list "SYNO.Core.Certificate" || die "$cert_list_error"
   fi
 
   cert_match_count=$(json_value "$cert_list_response" --arg desc "$ACME_CERT_DESC" '[.data.certificates[]? | select(.desc == $desc)] | length')
