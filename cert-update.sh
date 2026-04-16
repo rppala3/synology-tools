@@ -1,115 +1,184 @@
 #!/bin/sh
 
-USER=$(whoami) # DEBUG
 SCRIPT_NAME=$(basename "$0")
+SCRIPT_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
 LOG_TAG="synotools/$SCRIPT_NAME"
+ENV_FILE="$SCRIPT_DIR/env"
 
-# DEBUG
-msg="Run by $USER"
-logger -t "$LOG_TAG" -p daemon.info "$msg"
-echo "$msg"
-# /DEBUG
+log_info() {
+  logger -t "$LOG_TAG" -p daemon.info "$1"
+  echo "$1"
+}
 
-logger -t "$LOG_TAG" -p daemon.info "Test info message" # DEBUG
-logger -t "$LOG_TAG" -p daemon.warning "Test warning message" # DEBUG
-logger -t "$LOG_TAG" -p daemon.err "Test erroro message" # DEBUG
+log_warning() {
+  logger -t "$LOG_TAG" -p daemon.warning "$1"
+  echo "Warning: $1" >&2
+}
 
-. ./env
+die() {
+  logger -t "$LOG_TAG" -p daemon.err "$1"
+  echo "Error: $1" >&2
+  exit 1
+}
 
-logger -t "$LOG_TAG" -p daemon.info "Test '. ./env'" # DEBUG
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
 
-AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
-IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
+require_command() {
+  command_exists "$1" || die "Missing required command: $1"
+}
+
+require_var() {
+  eval "value=\${$1:-}"
+  [ -n "$value" ] || die "Missing required configuration value: $1"
+}
 
 check_file() {
-  local file="$1"
-  local err_msg="$2"
-  if [ ! -f "$file" ]; then
-    logger -t "$LOG_TAG" -p daemon.err "$err_msg"
-    echo "$err_msg"
-    exit 1
+  file="$1"
+  [ -f "$file" ] || die "Missing file: $file"
+  [ -r "$file" ] || die "File is not readable: $file"
+}
+
+json_value() {
+  printf '%s' "$1" | jq -r "$2"
+}
+
+curl_post() {
+  if [ "${SYNO_VERIFY_TLS:-false}" = "true" ]; then
+    curl -sS -X POST "$@"
+  else
+    curl -k -sS -X POST "$@"
   fi
 }
 
-check_file "$ACME_CERT_FILE" "Missing certificate file: $ACME_CERT_FILE"
-check_file "$ACME_KEY_FILE" "Missing key file: $ACME_KEY_FILE"
-check_file "$ACME_CA_FILE" "Missing CA file: $ACME_CA_FILE"
-
 session_id=""
-syno_token="" # Not used
-SYNO_APP="Core"
+syno_token=""
+SYNO_APP="${SYNO_APP:-Core}"
 
-# Function: Login to DSM
+cleanup() {
+  [ -n "$session_id" ] && dsm_logout
+}
+
+require_command curl
+require_command jq
+
+[ -f "$ENV_FILE" ] || die "Missing environment file: $ENV_FILE"
+# shellcheck source=/dev/null
+. "$ENV_FILE"
+
+require_var SYNO_HOST
+require_var SYNO_PORT
+require_var SYNO_USER
+require_var SYNO_PASS
+require_var ACME_CERT_FILE
+require_var ACME_KEY_FILE
+require_var ACME_CA_FILE
+require_var ACME_CERT_DESC
+
+check_file "$ACME_CERT_FILE"
+check_file "$ACME_KEY_FILE"
+check_file "$ACME_CA_FILE"
+
+AUTH_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/auth.cgi"
+IMPORT_ENDPOINT="https://$SYNO_HOST:$SYNO_PORT/webapi/entry.cgi"
+ACME_CERT_ID="${ACME_CERT_ID:-}"
+ACME_AS_DEFAULT="${ACME_AS_DEFAULT:-false}"
+
 dsm_login() {
-  LOGIN_RESPONSE=$(curl -k -s -X POST "$AUTH_ENDPOINT" \
+  LOGIN_RESPONSE=$(curl_post "$AUTH_ENDPOINT" \
     -d "api=SYNO.API.Auth" \
     -d "method=login" \
     -d "version=7" \
     -d "account=$SYNO_USER" \
     -d "passwd=$SYNO_PASS" \
-    -d "session=$SYNO_APP")
-    #   -d "enable_syno_token=yes" \
+    -d "session=$SYNO_APP" \
+    -d "enable_syno_token=yes") || die "Authentication request to $SYNO_HOST failed."
 
-  LOGIN_SUCCESS=$(echo "$LOGIN_RESPONSE" | jq -r '.success')
+  LOGIN_SUCCESS=$(json_value "$LOGIN_RESPONSE" '.success // false') || die "Authentication response was not valid JSON: $LOGIN_RESPONSE"
   if [ "$LOGIN_SUCCESS" != "true" ]; then
-    msg="Authentication on $SYNO_HOST failed."
-    logger -t "$LOG_TAG" -p daemon.err "$msg"
-    echo "Error: $msg"
-    exit 1
+    die "Authentication on $SYNO_HOST failed. Response: $LOGIN_RESPONSE"
   fi
 
-  session_id=$(echo "$LOGIN_RESPONSE" | jq -r '.data.sid')
-  # syno_token=$(echo "$LOGIN_RESPONSE" | jq -r '.data.synotoken')
-  # echo "Logged in successfully.\n  syno_token: $syno_token\n  Session ID: $session_id"
-  echo "Logged in successfully."
+  session_id=$(json_value "$LOGIN_RESPONSE" '.data.sid // empty')
+  syno_token=$(json_value "$LOGIN_RESPONSE" '.data.synotoken // empty')
+  [ -n "$session_id" ] || die "Authentication on $SYNO_HOST did not return a session id. Response: $LOGIN_RESPONSE"
+
+  log_info "Logged in successfully on $SYNO_HOST."
 }
 
-# Function: Logout from DSM
 dsm_logout() {
-  LOGOUT_RESPONSE=$(curl -k -s -X POST "$AUTH_ENDPOINT" \
+  LOGOUT_RESPONSE=$(curl_post "$AUTH_ENDPOINT" \
     -d "api=SYNO.API.Auth" \
     -d "method=logout" \
     -d "version=7" \
     -d "session=$SYNO_APP" \
     -d "_sid=$session_id")
-  LOGOUT_SUCCESS=$(echo "$LOGOUT_RESPONSE" | jq -r '.success')
+  LOGOUT_SUCCESS=$(json_value "$LOGOUT_RESPONSE" '.success // false')
+
+  session_id=""
 
   if [ "$LOGOUT_SUCCESS" != "true" ]; then
-    msg="Logout failed. Session might still be active."
-    logger -t "$LOG_TAG" -p daemon.warning "$msg"
-    echo "Warning: $msg"
-    exit 1
+    log_warning "Logout from $SYNO_HOST failed. Response: $LOGOUT_RESPONSE"
+    return 1
   fi
 
-  echo "Logged out successfully."
+  log_info "Logged out successfully from $SYNO_HOST."
 }
 
-# Function: Import TLS Certificate
 dsm_cert_import() {
-  UPLOAD_RESPONSE=$(curl -k -s -X POST "$IMPORT_ENDPOINT?api=SYNO.Core.Certificate&version=1&method=import&session=$SYNO_APP&_sid=$session_id" \
-    -F "as_default=false" \
-    -F "id=$ACME_CERT_ID" \
-    -F "desc=$ACME_CERT_DESC" \
-    -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
-    -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
-    -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
-  #   -H "X-SYNO-TOKEN: $syno_token" \
+  import_url="$IMPORT_ENDPOINT?api=SYNO.Core.Certificate&version=1&method=import&session=$SYNO_APP&_sid=$session_id"
 
-  UPLOAD_SUCCESS=$(echo "$UPLOAD_RESPONSE" | jq -r '.success')
-  if [ "$UPLOAD_SUCCESS" != "true" ]; then
-    msg="Upload certificate failed on $SYNO_HOST.\nResponse: $UPLOAD_RESPONSE"
-    logger -t "$LOG_TAG" -p daemon.err "$msg"
-    echo "Error: $msg"
-    dsm_logout
-    exit 1
+  if [ -n "$ACME_CERT_ID" ]; then
+    if [ -n "$syno_token" ]; then
+      UPLOAD_RESPONSE=$(curl_post "$import_url" \
+        -H "X-SYNO-TOKEN: $syno_token" \
+        -F "as_default=$ACME_AS_DEFAULT" \
+        -F "id=$ACME_CERT_ID" \
+        -F "desc=$ACME_CERT_DESC" \
+        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
+    else
+      UPLOAD_RESPONSE=$(curl_post "$import_url" \
+        -F "as_default=$ACME_AS_DEFAULT" \
+        -F "id=$ACME_CERT_ID" \
+        -F "desc=$ACME_CERT_DESC" \
+        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
+    fi
+  else
+    if [ -n "$syno_token" ]; then
+      UPLOAD_RESPONSE=$(curl_post "$import_url" \
+        -H "X-SYNO-TOKEN: $syno_token" \
+        -F "as_default=$ACME_AS_DEFAULT" \
+        -F "desc=$ACME_CERT_DESC" \
+        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
+    else
+      UPLOAD_RESPONSE=$(curl_post "$import_url" \
+        -F "as_default=$ACME_AS_DEFAULT" \
+        -F "desc=$ACME_CERT_DESC" \
+        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
+    fi
   fi
 
-  msg="Certificate uploaded successfully on $SYNO_HOST."
-  logger -t "$LOG_TAG" -p daemon.info "$msg"
-  echo "$msg"
+  UPLOAD_SUCCESS=$(json_value "$UPLOAD_RESPONSE" '.success // false') || die "Upload certificate response was not valid JSON: $UPLOAD_RESPONSE"
+  if [ "$UPLOAD_SUCCESS" != "true" ]; then
+    die "Upload certificate failed on $SYNO_HOST. Response: $UPLOAD_RESPONSE"
+  fi
+
+  log_info "Certificate uploaded successfully on $SYNO_HOST."
 }
 
-# Main Script Execution
+trap cleanup EXIT HUP INT TERM
+
+log_info "Starting certificate import for $ACME_CERT_DESC."
 dsm_login
 dsm_cert_import
 dsm_logout
+trap - EXIT HUP INT TERM
