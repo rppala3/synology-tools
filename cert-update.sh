@@ -129,43 +129,23 @@ dsm_logout() {
 dsm_cert_import() {
   import_url="$IMPORT_ENDPOINT?api=SYNO.Core.Certificate&version=1&method=import&session=$SYNO_APP&_sid=$session_id"
 
-  if [ -n "$ACME_CERT_ID" ]; then
-    if [ -n "$syno_token" ]; then
-      UPLOAD_RESPONSE=$(curl_post "$import_url" \
-        -H "X-SYNO-TOKEN: $syno_token" \
-        -F "as_default=$ACME_AS_DEFAULT" \
-        -F "id=$ACME_CERT_ID" \
-        -F "desc=$ACME_CERT_DESC" \
-        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
-        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
-        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
-    else
-      UPLOAD_RESPONSE=$(curl_post "$import_url" \
-        -F "as_default=$ACME_AS_DEFAULT" \
-        -F "id=$ACME_CERT_ID" \
-        -F "desc=$ACME_CERT_DESC" \
-        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
-        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
-        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
-    fi
-  else
-    if [ -n "$syno_token" ]; then
-      UPLOAD_RESPONSE=$(curl_post "$import_url" \
-        -H "X-SYNO-TOKEN: $syno_token" \
-        -F "as_default=$ACME_AS_DEFAULT" \
-        -F "desc=$ACME_CERT_DESC" \
-        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
-        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
-        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
-    else
-      UPLOAD_RESPONSE=$(curl_post "$import_url" \
-        -F "as_default=$ACME_AS_DEFAULT" \
-        -F "desc=$ACME_CERT_DESC" \
-        -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
-        -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
-        -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
-    fi
+  set -- "$import_url"
+
+  if [ -n "$syno_token" ]; then
+    set -- "$@" -H "X-SYNO-TOKEN: $syno_token"
   fi
+
+  set -- "$@" -F "as_default=$ACME_AS_DEFAULT"
+
+  if [ -n "$ACME_CERT_ID" ]; then
+    set -- "$@" -F "id=$ACME_CERT_ID"
+  fi
+
+  UPLOAD_RESPONSE=$(curl_post "$@" \
+    -F "desc=$ACME_CERT_DESC" \
+    -F "key=@$ACME_KEY_FILE;type=application/x-x509-ca-cert" \
+    -F "cert=@$ACME_CERT_FILE;type=application/x-x509-ca-cert" \
+    -F "inter_cert=@$ACME_CA_FILE;type=application/x-x509-ca-cert")
 
   UPLOAD_SUCCESS=$(json_value "$UPLOAD_RESPONSE" '.success // false') || die "Upload certificate response was not valid JSON: $UPLOAD_RESPONSE"
   if [ "$UPLOAD_SUCCESS" != "true" ]; then
