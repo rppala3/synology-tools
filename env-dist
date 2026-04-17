@@ -6,8 +6,8 @@ SYNO_VERIFY_TLS=false      # Set to true only if pfSense trusts the DSM certific
 SYNO_APP="Core"
 
 ACME_PATH="/conf/acme"
-ACME_CERT_FILE="$ACME_PATH/gargantua.wilsley.xyz.crt"
-ACME_KEY_FILE="$ACME_PATH/gargantua.wilsley.xyz.key"
-ACME_CA_FILE="$ACME_PATH/gargantua.wilsley.xyz.ca"
-ACME_CERT_DESC="gargantua.wilsley.xyz"
+ACME_CERT_DESC="__CHANGE_ME__"
+ACME_CERT_FILE="$ACME_PATH/$ACME_CERT_DESC.crt"
+ACME_KEY_FILE="$ACME_PATH/$ACME_CERT_DESC.key"
+ACME_CA_FILE="$ACME_PATH/$ACME_CERT_DESC.ca"
 ACME_AS_DEFAULT=false
